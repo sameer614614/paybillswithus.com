@@ -134,3 +134,4 @@ These steps are safe to repeat whenever new commits land, and they ensure valida
 The core relational model, JWT integration guidance, and a step-by-step PostgreSQL installation checklist for the GoDaddy VPS are documented in [`docs/database-architecture.md`](docs/database-architecture.md). Cross-reference that document with the live Prisma schema in `backend/prisma/schema.prisma` for the authoritative column names used by the running API.
 
 The marketing site highlights the 25% savings offer, showcases supported provider categories, and explains the post-sign-up process. The sign-up form collects all required identity, address, and credential details with client-side validation so agents can complete onboarding while customers immediately gain dashboard access to manage their payment methods.
+hhh
