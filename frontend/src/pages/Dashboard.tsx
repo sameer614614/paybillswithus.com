@@ -30,6 +30,11 @@ function DashboardPage() {
             <p className="font-semibold text-slate-700">Profile</p>
             <p>{userProfile?.firstName} {userProfile?.lastName}</p>
             <p>{userProfile?.email}</p>
+            {userProfile?.customerNumber && (
+              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Customer #: {userProfile.customerNumber}
+              </p>
+            )}
             {userProfile?.addressLine1 && <p className="mt-1">{userProfile.addressLine1}</p>}
             {userProfile?.addressLine2 && <p>{userProfile.addressLine2}</p>}
             {(userProfile?.city || userProfile?.state || userProfile?.postalCode) && (
