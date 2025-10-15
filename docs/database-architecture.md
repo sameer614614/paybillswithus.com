@@ -1,10 +1,11 @@
 # Database Architecture & Setup Guide
 
-This document explains how to stand up the initial relational database for the
+This document explains how to stand up the relational database for the
 paybillswithus.com platform on your GoDaddy VPS, align it with the JWT-based
-authentication flow, and support the user capabilities currently exposed in the
-front-end prototype. It intentionally focuses on the user portal first; the
-admin and agent portals will be layered on top of this foundation later.
+authentication flow, and support the customer, admin, and agent capabilities
+implemented in the codebase. The customer portal remains the public entry point
+while the admin and agent consoles are deployed behind restricted hostnames,
+but all three experiences share the same PostgreSQL schema.
 
 ---
 
@@ -45,16 +46,17 @@ Debian on your VPS.
 
 ---
 
-## 2. Recommended schema (user-focused scope)
+## 2. Recommended schema (user + admin + agent scope)
 
 > **Live reference:** The production schema used by the running API is maintained in [`backend/prisma/schema.prisma`](../backend/prisma/schema.prisma). The entity-relationship diagram below remains conceptually accurate, but always defer to the Prisma schema for exact column names and enum values when applying migrations.
 
 ```mermaid
 erDiagram
     users ||--o{ payment_methods : "has"
-    users ||--o{ user_billers : "tracks"
-    user_billers }o--|| billers : "references"
+    users ||--o{ billers : "tracks"
     users ||--o{ receipts : "has"
+    agents ||--o{ agent_customer_assignments : "supports"
+    users ||--o{ agent_customer_assignments : "assisted by"
 
     users {
         uuid id PK
@@ -70,47 +72,30 @@ erDiagram
         text city
         text state
         text postal_code
-        text country
         text customer_number
         timestamptz created_at
         timestamptz updated_at
-        timestamptz email_verified_at
-        timestamptz last_login_at
-        boolean is_active
     }
 
     payment_methods {
         uuid id PK
         uuid user_id FK
-        text type -- 'card' or 'ach'
-        text brand -- for cards (e.g., Visa)
+        text type -- 'CREDIT_CARD', 'DEBIT_CARD', 'BANK_ACCOUNT'
+        text provider
         text last4
-        smallint exp_month
-        smallint exp_year
-        text name_on_account
-        text routing_number_hash -- only for ACH
-        text account_number_hash -- only for ACH
-        boolean is_primary
+        text cardholder_name
+        boolean is_default
         timestamptz created_at
         timestamptz updated_at
     }
 
     billers {
         uuid id PK
-        text name
-        text category -- internet, home, tv, electric, mobile
-        text phone
-        text website
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    user_billers {
-        uuid id PK
         uuid user_id FK
-        uuid biller_id FK
-        text account_number_encrypted
-        text notes
+        text name
+        text category
+        text account_id
+        text contact_info
         timestamptz created_at
         timestamptz updated_at
     }
@@ -118,24 +103,46 @@ erDiagram
     receipts {
         uuid id PK
         uuid user_id FK
-        uuid user_biller_id FK
-        text receipt_number
+        uuid biller_id FK
         numeric amount
-        timestamptz paid_at
-        text storage_url -- S3/object storage path of uploaded receipt
+        timestamptz paid_on
+        text confirmation
+        text notes
         timestamptz created_at
+    }
+
+    agents {
+        uuid id PK
+        text username
+        text password_hash
+        text full_name
+        text email
+        text phone
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    agent_customer_assignments {
+        uuid agent_id FK
+        uuid user_id FK
+        timestamptz assigned_at
     }
 ```
 
 ### Key behaviors
 
-* **Customer number generation** – Populate `customer_number` with a unique
-  human-readable identifier once sign-up and identity verification succeed
-  (e.g., `US-2024-000123`).
+* **Customer number generation** – The API now guarantees a unique
+  `customer_number` for every user and returns it in the JWT payload so both the
+  dashboard and the call-center tooling can reference the same identifier.
 * **Payment methods** – Store only the minimum necessary details. Full card or
-  bank numbers must be tokenized or encrypted via your chosen payment processor.
-* **Billers & receipts** – Only agents can mutate these records. Authenticated
-  users query their `user_billers` and `receipts` rows in read-only mode.
+  bank numbers must be tokenized or encrypted via your chosen payment processor
+  before persisting `account_number`/`routing_number` equivalents.
+* **Billers & receipts** – Only agents and administrators can mutate these
+  records. Authenticated users query their billers, payment methods, and
+  receipts in read-only mode.
+* **Agent accounts** – Admins provision agent usernames and passwords, which
+  are stored as bcrypt hashes in the `agents` table. The `agent_customer_assignments`
+  table optionally tracks which agent last assisted a customer.
 * **Soft deletion** – Use the `is_active` flag (or add `deleted_at` timestamps)
   instead of hard-deleting rows to keep an audit trail.
 
@@ -163,11 +170,7 @@ CREATE TABLE users (
     city TEXT NOT NULL,
     state CHAR(2) NOT NULL,
     postal_code TEXT NOT NULL,
-    country TEXT NOT NULL DEFAULT 'US',
-    customer_number TEXT UNIQUE,
-    email_verified_at TIMESTAMPTZ,
-    last_login_at TIMESTAMPTZ,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    customer_number TEXT NOT NULL UNIQUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -175,54 +178,73 @@ CREATE TABLE users (
 CREATE TABLE payment_methods (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    type TEXT NOT NULL CHECK (type IN ('card', 'ach')),
-    brand TEXT,
+    type TEXT NOT NULL CHECK (type IN ('CREDIT_CARD', 'DEBIT_CARD', 'BANK_ACCOUNT')),
+    provider TEXT NOT NULL,
+    account_number TEXT NOT NULL,
     last4 TEXT NOT NULL,
+    cardholder_name TEXT,
+    nickname TEXT,
     exp_month SMALLINT,
     exp_year SMALLINT,
-    name_on_account TEXT,
-    routing_number_hash TEXT,
-    account_number_hash TEXT,
-    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    brand TEXT,
+    security_code TEXT,
+    billing_address_line1 TEXT,
+    billing_address_line2 TEXT,
+    billing_city TEXT,
+    billing_state TEXT,
+    billing_postal_code TEXT,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE billers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     category TEXT NOT NULL,
-    phone TEXT,
-    website TEXT,
+    account_id TEXT NOT NULL,
+    contact_info TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE user_billers (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    biller_id UUID NOT NULL REFERENCES billers(id),
-    account_number_encrypted TEXT,
-    notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (user_id, biller_id)
 );
 
 CREATE TABLE receipts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    user_biller_id UUID NOT NULL REFERENCES user_billers(id) ON DELETE CASCADE,
-    receipt_number TEXT,
-    amount NUMERIC(12, 2) NOT NULL,
-    paid_at TIMESTAMPTZ NOT NULL,
-    storage_url TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    biller_id UUID NOT NULL REFERENCES billers(id) ON DELETE CASCADE,
+    amount NUMERIC(10, 2) NOT NULL,
+    paid_on TIMESTAMPTZ NOT NULL,
+    confirmation TEXT,
+    notes TEXT,
+    download_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE agents (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE agent_customer_assignments (
+    agent_id UUID NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (agent_id, user_id)
 );
 
 CREATE INDEX idx_payment_methods_user ON payment_methods(user_id);
-CREATE INDEX idx_user_billers_user ON user_billers(user_id);
+CREATE INDEX idx_billers_user ON billers(user_id);
 CREATE INDEX idx_receipts_user ON receipts(user_id);
+CREATE INDEX idx_agent_assignments_agent ON agent_customer_assignments(agent_id);
+CREATE INDEX idx_agent_assignments_user ON agent_customer_assignments(user_id);
 ```
 
 > You can manage migrations through tools like Prisma Migrate, Knex, or simple
@@ -261,8 +283,32 @@ CREATE INDEX idx_receipts_user ON receipts(user_id);
 | `/api/billers` | GET | Read-only list of a user's billers | Agents manage creation via separate portal. |
 | `/api/receipts` | GET | Read-only list of receipts for the user | Filter by date/biller when needed. |
 
-Agent/admin APIs will cover biller creation, receipt uploads, and customer
-status updates. Keep them on separate subdomains or behind VPN as planned.
+Host-restricted admin endpoints:
+
+| Endpoint | Method | Purpose |
+| --- | --- | --- |
+| `/api/admin/login` | POST | Authenticate the hard-coded admin credential (`sameer614614` / `Cake@1245`). |
+| `/api/admin/agents` | GET/POST | List existing agents or create a new agent (admin-only). |
+| `/api/admin/agents/:id` | PUT/DELETE | Update credentials/contact details or remove an agent. |
+| `/api/admin/customers` | GET | Search customers by name, email, phone, or customer number. |
+| `/api/admin/customers/:id` | GET | Fetch the full profile, billers, payment methods, and receipts for auditing. |
+| `/api/admin/transactions` | GET | Review receipt history filtered by confirmation number or customer query. |
+| `/api/admin/billers` | GET | Inspect billers along with the customers linked to them. |
+
+Host-restricted agent endpoints:
+
+| Endpoint | Method | Purpose |
+| --- | --- | --- |
+| `/api/agent/login` | POST | Authenticate an agent provisioned by the admin. |
+| `/api/agent/customers` | GET | Search customers while taking support calls. |
+| `/api/agent/customers/:id` | GET | Load the same customer detail view delivered to admins. |
+| `/api/agent/customers/:id/billers` | POST/PUT/DELETE | Add, update, or remove billers on behalf of a customer. |
+| `/api/agent/customers/:id/payment-methods` | GET/POST | Review or add payment methods while speaking with the customer. |
+| `/api/agent/customers/:id/payment-methods/:paymentMethodId` | PUT/DELETE | Adjust nicknames/expirations or remove a stored method. |
+
+All admin/agent routes enforce the `ADMIN_ALLOWED_HOSTS` / `AGENT_ALLOWED_HOSTS`
+checks described in the README so they remain unreachable from the public site
+or opportunistic scans.
 
 ---
 
