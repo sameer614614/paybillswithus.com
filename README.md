@@ -63,3 +63,17 @@ tell me full detailed then i will make changes or approve it then we will coding
 
 proper flow diagram proper database handling 
 proper erroors any things handling
+
+---
+
+## Front-end prototype
+
+The initial visitor website and user sign-up experience are implemented in the Vite + React + TypeScript app located in this repository root. Tailwind CSS provides the design system, and React Router powers navigation between the marketing site and the secure enrollment form.
+
+### Running locally
+
+1. Install dependencies with `npm install`.
+2. Start the development server via `npm run dev` and open the printed URL.
+3. Build production assets with `npm run build`.
+
+The marketing site highlights the 25% savings offer, showcases supported provider categories, and explains the post-sign-up process. The sign-up form collects all required identity, address, and credential details with client-side validation so agents can complete onboarding once the back-end and portals are ready.
