@@ -68,12 +68,49 @@ proper erroors any things handling
 
 ## Front-end prototype
 
-The initial visitor website and user sign-up experience are implemented in the Vite + React + TypeScript app located in this repository root. Tailwind CSS provides the design system, and React Router powers navigation between the marketing site and the secure enrollment form.
+The initial visitor website and user sign-up experience live in the Vite + React + TypeScript app under [`frontend/`](frontend/). Tailwind CSS provides the design system, and React Router powers navigation between the marketing site, the secure enrollment form, the customer login page, and the authenticated dashboard where customers can manage payment methods and review assigned billers and receipts.
+
+## API & database service
+
+A dedicated Express + TypeScript back end lives in [`backend/`](backend/) and exposes JWT-protected REST endpoints for:
+
+* registering and authenticating customers,
+* creating, updating, and deleting customer payment methods (with account numbers encrypted at rest), and
+* reading linked billers and payment receipts that agents have uploaded.
+
+Prisma models the PostgreSQL schema in [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma); run migrations after setting up your VPS database to keep the code and schema in sync.
+
+### Environment variables
+
+Create a `.env` file in each package based on the provided examples:
+
+* Front end (`frontend/.env.local`):
+  ```bash
+  VITE_API_BASE_URL="http://localhost:4000/api"
+  ```
+
+* Back end (`backend/.env`):
+  ```bash
+  DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE?schema=public"
+  JWT_SECRET="replace-with-strong-secret"
+  DATA_ENCRYPTION_KEY="base64-encoded-32-byte-key" # 32 bytes
+  PORT=4000
+  CLIENT_ORIGIN="http://localhost:5173"
+  ```
+
+Generate the `DATA_ENCRYPTION_KEY` with `openssl rand -base64 32` so payment account numbers can be encrypted before they are stored in PostgreSQL.
 
 ### Running locally
 
-1. Install dependencies with `npm install`.
-2. Start the development server via `npm run dev` and open the printed URL.
-3. Build production assets with `npm run build`.
+1. Install front-end dependencies with `cd frontend && npm install`.
+2. Install API dependencies with `cd backend && npm install`.
+3. In one terminal run the API: `npm run dev` inside `backend/`.
+4. In another terminal run the front end: `npm run dev` inside `frontend/`.
 
-The marketing site highlights the 25% savings offer, showcases supported provider categories, and explains the post-sign-up process. The sign-up form collects all required identity, address, and credential details with client-side validation so agents can complete onboarding once the back-end and portals are ready.
+Run `npm run build` in each package to produce production assets (`backend` uses `npm run build` to transpile TypeScript, and the front end already exposes the same command).
+
+### Database planning
+
+The core relational model, JWT integration guidance, and a step-by-step PostgreSQL installation checklist for the GoDaddy VPS are documented in [`docs/database-architecture.md`](docs/database-architecture.md). Cross-reference that document with the live Prisma schema in `backend/prisma/schema.prisma` for the authoritative column names used by the running API.
+
+The marketing site highlights the 25% savings offer, showcases supported provider categories, and explains the post-sign-up process. The sign-up form collects all required identity, address, and credential details with client-side validation so agents can complete onboarding while customers immediately gain dashboard access to manage their payment methods.
