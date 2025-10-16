@@ -5,6 +5,7 @@ export type AuthUser = {
   email: string;
   firstName: string;
   lastName: string;
+  customerNumber?: string;
 };
 
 export type AuthResponse = {
@@ -20,6 +21,7 @@ export type Profile = AuthUser & {
   state?: string;
   postalCode?: string;
   createdAt?: string;
+  customerNumber?: string;
 };
 
 export async function registerUser(payload: Record<string, unknown>) {

@@ -66,48 +66,65 @@ proper erroors any things handling
 
 ---
 
-## Front-end prototype
+## Application structure
 
-The initial visitor website and user sign-up experience live in the Vite + React + TypeScript app under [`frontend/`](frontend/). Tailwind CSS provides the design system, and React Router powers navigation between the marketing site, the secure enrollment form, the customer login page, and the authenticated dashboard where customers can manage payment methods and review assigned billers and receipts.
+The project is split into three React single-page apps plus a shared Express API:
 
-## API & database service
+* [`frontend/`](frontend/) – public marketing site, sign-up flow, and authenticated customer dashboard.
+* [`admin/`](admin/) – restricted console for the business owner to manage agents, customers, transactions, and billers.
+* [`agent/`](agent/) – call-center tooling for agents to authenticate, locate customers, and update billers or payment methods while on the phone.
+* [`backend/`](backend/) – Express + TypeScript API that issues JWTs, serves customer data, and mediates biller/payment method updates.
 
-A dedicated Express + TypeScript back end lives in [`backend/`](backend/) and exposes JWT-protected REST endpoints for:
-
-* registering and authenticating customers,
-* creating, updating, and deleting customer payment methods (with account numbers encrypted at rest), and
-* reading linked billers and payment receipts that agents have uploaded.
-
-Prisma models the PostgreSQL schema in [`backend/prisma/schema.prisma`](backend/prisma/schema.prisma); run migrations after setting up your VPS database to keep the code and schema in sync.
+Each app ships independently so you can deploy the customer experience on the main domain while exposing the admin and agent panels behind private hostnames or VPNs. The API enforces this split with host-allow lists on all `/api/admin/*` and `/api/agent/*` routes so scans against the public site will receive 403 responses even if the paths are guessed.
 
 ### Environment variables
 
-Create a `.env` file in each package based on the provided examples:
+Every package ships with an `.env.example` template – copy it to `.env` (or `.env.local` for Vite apps) and tailor the values for your environment.
 
 * Front end (`frontend/.env.local`):
   ```bash
   VITE_API_BASE_URL="http://localhost:4000/api"
   ```
 
-* Back end (`backend/.env`):
+* Admin panel (`admin/.env`):
+  ```bash
+  VITE_API_URL="http://localhost:4000/api"
+  ```
+
+* Agent panel (`agent/.env`):
+  ```bash
+  VITE_API_URL="http://localhost:4000/api"
+  ```
+
+* API (`backend/.env`):
   ```bash
   DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE?schema=public"
   JWT_SECRET="replace-with-strong-secret"
   DATA_ENCRYPTION_KEY="base64-encoded-32-byte-key" # 32 bytes
   PORT=4000
   CLIENT_ORIGIN="http://localhost:5173"
+  ADMIN_ALLOWED_HOSTS="admin.paybillswithus.local,localhost"
+  AGENT_ALLOWED_HOSTS="agent.paybillswithus.local,localhost"
   ```
 
-Generate the `DATA_ENCRYPTION_KEY` with `openssl rand -base64 32` so payment account numbers can be encrypted before they are stored in PostgreSQL.
+`ADMIN_ALLOWED_HOSTS` and `AGENT_ALLOWED_HOSTS` must enumerate the exact hostnames (without protocol) that are allowed to reach the sensitive routes. Populate these with the private subdomains or VPN hostnames you configure on the VPS. Generate the `DATA_ENCRYPTION_KEY` with `openssl rand -base64 32` so payment account numbers can be encrypted before they are stored in PostgreSQL.
 
 ### Running locally
 
-1. Install front-end dependencies with `cd frontend && npm install`.
-2. Install API dependencies with `cd backend && npm install`.
-3. In one terminal run the API: `npm run dev` inside `backend/`.
-4. In another terminal run the front end: `npm run dev` inside `frontend/`.
+1. Install dependencies in every workspace:
+   * `cd backend && npm install`
+   * `cd ../frontend && npm install`
+   * `cd ../admin && npm install`
+   * `cd ../agent && npm install`
+2. In one terminal run the API: `cd backend && npm run dev`.
+3. In another terminal start the public front end: `cd frontend && npm run dev`.
+4. Optionally run the admin and agent panels from separate terminals (`npm run dev` inside `admin/` and `agent/`).
 
-Run `npm run build` in each package to produce production assets (`backend` uses `npm run build` to transpile TypeScript, and the front end already exposes the same command).
+Run `npm run build` in each package to produce production assets (`backend` compiles TypeScript while the React apps emit static bundles). Deploy the admin and agent builds only to infrastructure that sits behind your approved hostnames.
+
+### Making `admin.paybillswithus.com` reachable
+
+Follow the deployment guide in [`docs/admin-agent-deployment.md`](docs/admin-agent-deployment.md) to point the `admin.paybillswithus.com` subdomain at your VPS, restrict traffic to the trusted IP range, and serve the Vite build output. The same steps cover the agent console (`agent.paybillswithus.com`).
 
 ### Updating an existing deployment
 
@@ -118,14 +135,19 @@ When you pull new changes onto the GoDaddy VPS, follow this repeatable sequence 
 3. Install/refresh dependencies:
    * `cd backend && npm install`
    * `cd ../frontend && npm install`
+   * `cd ../admin && npm install`
+   * `cd ../agent && npm install`
 4. Apply any pending Prisma migrations so PostgreSQL matches the code:
    * `cd ../backend`
    * `npx prisma migrate deploy`
 5. Build the production bundles:
    * `npm run build` inside `backend/`
    * `cd ../frontend && npm run build`
-6. Restart the running processes (for example, `pm2 restart paybills-api` and `pm2 restart paybills-frontend`, or restart the systemd services you configured).
-7. Confirm everything is healthy by hitting the API health check (`curl http://YOUR_API_HOST:4000/health`) and by loading the front-end site in a browser.
+   * `cd ../admin && npm run build`
+   * `cd ../agent && npm run build`
+6. Deploy the `frontend/dist` bundle to the public site and host the `admin/dist` and `agent/dist` bundles behind their secured hostnames or VPN.
+7. Restart the running processes (for example, `pm2 restart paybills-api` and `pm2 restart paybills-frontend`, or restart the systemd services you configured).
+8. Confirm everything is healthy by hitting the API health check (`curl http://YOUR_API_HOST:4000/health`) and by loading the front-end site in a browser. Attempting to hit `/api/admin/health` or `/api/agent/health` from an unapproved host should return HTTP 403.
 
 These steps are safe to repeat whenever new commits land, and they ensure validation changes (like the payment method updates in this patch) take effect immediately.
 
