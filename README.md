@@ -152,6 +152,8 @@ When you pull new changes onto the GoDaddy VPS, follow this repeatable sequence 
 
 These steps are safe to repeat whenever new commits land, and they ensure validation changes (like the payment method updates in this patch) take effect immediately.
 
+If `git pull` refuses to run or the tree becomes inconsistent (for example after a forced reset), open [`docs/git-sync-and-deploy.md`](docs/git-sync-and-deploy.md) for a step-by-step recovery walkthrough that covers stashing work, reconciling divergent history, and redeploying a clean build.
+
 ### Database planning
 
 The core relational model, JWT integration guidance, and a step-by-step PostgreSQL installation checklist for the GoDaddy VPS are documented in [`docs/database-architecture.md`](docs/database-architecture.md). Cross-reference that document with the live Prisma schema in `backend/prisma/schema.prisma` for the authoritative column names used by the running API.
