@@ -122,10 +122,6 @@ Every package ships with an `.env.example` template – copy it to `.env` (or `.
 
 Run `npm run build` in each package to produce production assets (`backend` compiles TypeScript while the React apps emit static bundles). Deploy the admin and agent builds only to infrastructure that sits behind your approved hostnames.
 
-### Making `admin.paybillswithus.com` reachable
-
-Follow the deployment guide in [`docs/admin-agent-deployment.md`](docs/admin-agent-deployment.md) to point the `admin.paybillswithus.com` subdomain at your VPS, restrict traffic to the trusted IP range, and serve the Vite build output. The same steps cover the agent console (`agent.paybillswithus.com`).
-
 ### Updating an existing deployment
 
 When you pull new changes onto the GoDaddy VPS, follow this repeatable sequence to keep the API, database schema, and front end in sync:
