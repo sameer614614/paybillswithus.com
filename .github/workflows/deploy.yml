@@ -1,4 +1,4 @@
-name: Deploy to VPS
+name: 🚀 Auto Deploy to GoDaddy VPS
 
 on:
   push:
@@ -8,41 +8,30 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: 🚚 Deploy to Server
-        uses: appleboy/ssh-action@master
+      - name: 🧾 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🧠 Validate node setup
+        uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USERNAME }}
-          key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          node-version: '20'
+
+      - name: 🧪 Verify basic build before deploy
+        run: |
+          npm ci --prefix backend
+          npm ci --prefix frontend
+          npm run build --prefix frontend
+          echo "✅ Pre-deploy checks passed"
+
+      - name: 🔐 SSH to VPS and run deploy script
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.GODADDY_HOST }}
+          username: ${{ secrets.GODADDY_USER }}
+          key: ${{ secrets.GODADDY_SSH_KEY }}
+          script_stop: true
           script: |
-            # Navigate to the project directory
             cd /opt/paybillswithus.com
-
-            # Pull the latest code
-            git reset --hard
-            git pull origin main
-
-            # Install all dependencies
-            echo "Installing dependencies..."
-            npm install --prefix backend
-            npm install --prefix frontend
-            npm install --prefix admin
-            npm install --prefix agent
-
-            # Apply database migrations
-            echo "Running database migrations..."
-            cd /opt/paybillswithus.com/backend
-            npx prisma migrate deploy
-
-            # Build all applications
-            echo "Building applications..."
-            npm run build --prefix /opt/paybillswithus.com/backend
-            npm run build --prefix /opt/paybillswithus.com/frontend
-            npm run build --prefix /opt/paybillswithus.com/admin
-            npm run build --prefix /opt/paybillswithus.com/agent
-
-            # Restart services
-            echo "Restarting services..."
-            pm2 restart paybillswithus-api
-            systemctl restart nginx
+            ./deploy.sh
