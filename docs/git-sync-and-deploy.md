@@ -74,6 +74,22 @@ You now have three safe options:
    git push -u origin feature/new-admin-update
    ```
 
+### 5a. Rebase or merge your refreshed branch before opening the PR
+
+With the new feature branch checked out, bring in the latest `main` history so GitHub shows a conflict-free diff:
+
+```bash
+# Option A: rebase (linear history)
+git fetch origin
+git rebase origin/main
+
+# Option B: merge (preserves feature branch commits exactly as written)
+git fetch origin
+git merge --no-edit origin/main
+```
+
+Because the working tree is clean from steps 1–4, either command completes without manual edits. Afterward run your builds/tests, commit if necessary, and push the branch back to GitHub.
+
 ## 6. Deploy the refreshed code to the GoDaddy VPS
 
 Once `main` is up to date locally, rebuild and restart the services:
