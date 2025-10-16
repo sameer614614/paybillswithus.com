@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../utils/prisma.js';
 import { env } from '../config/env.js';
+import { generateCustomerNumber } from '../utils/customerNumber.js';
 
 const SALT_ROUNDS = 12;
 
@@ -28,12 +29,15 @@ export async function registerUser(data: {
 
   const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
 
+  const customerNumber = await generateCustomerNumber();
+
   const user = await prisma.user.create({
     data: {
       email: data.email,
       passwordHash,
       firstName: data.firstName,
       lastName: data.lastName,
+      customerNumber,
       dateOfBirth: new Date(data.dateOfBirth),
       ssnLast4: data.ssnLast4,
       phone: data.phone,
@@ -50,6 +54,7 @@ export async function registerUser(data: {
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
+    customerNumber: user.customerNumber,
   };
 }
 
@@ -83,6 +88,7 @@ export async function authenticateUser(email: string, password: string) {
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
+      customerNumber: user.customerNumber,
     },
   };
 }
@@ -102,6 +108,7 @@ export async function getProfile(userId: string) {
       state: true,
       postalCode: true,
       createdAt: true,
+      customerNumber: true,
     },
   });
 

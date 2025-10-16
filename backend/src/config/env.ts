@@ -1,6 +1,14 @@
 import 'dotenv/config';
 
-const requiredEnv = ['DATABASE_URL', 'JWT_SECRET', 'PORT', 'CLIENT_ORIGIN', 'DATA_ENCRYPTION_KEY'] as const;
+const requiredEnv = [
+  'DATABASE_URL',
+  'JWT_SECRET',
+  'PORT',
+  'CLIENT_ORIGIN',
+  'DATA_ENCRYPTION_KEY',
+  'ADMIN_ALLOWED_HOSTS',
+  'AGENT_ALLOWED_HOSTS',
+] as const;
 
 type RequiredEnvKey = typeof requiredEnv[number];
 
