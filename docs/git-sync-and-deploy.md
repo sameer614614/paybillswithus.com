@@ -90,6 +90,25 @@ git merge --no-edit origin/main
 
 Because the working tree is clean from steps 1–4, either command completes without manual edits. Afterward run your builds/tests, commit if necessary, and push the branch back to GitHub.
 
+### 5b. Auto-resolve lockfile conflicts
+
+If GitHub reports conflicts on the generated `package-lock.json` files after you rebase or merge, accept the versions from your feature branch without opening the files manually:
+
+```bash
+# Example for the admin panel lockfile
+git checkout --ours admin/package-lock.json
+
+# Repeat for any other generated files that appear in the conflict list
+git checkout --ours agent/package-lock.json
+git checkout --ours backend/package-lock.json
+git checkout --ours frontend/package-lock.json
+
+# Stage the resolutions and continue the rebase/merge
+git add admin/package-lock.json agent/package-lock.json backend/package-lock.json frontend/package-lock.json
+```
+
+Because each lockfile is re-created by `npm install`, trusting the copy from your branch is safe and keeps the history linear. Finish the rebase with `git rebase --continue` (or complete the merge with `git commit`) once all files show as resolved.
+
 ## 6. Deploy the refreshed code to the GoDaddy VPS
 
 Once `main` is up to date locally, rebuild and restart the services:
